@@ -1,0 +1,158 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+
+	ptpv1 "github.com/k8snetworkplumbingwg/ptp-operator/api/v1"
+	"github.com/redhat-cne/ptpgen/pkg/client"
+	"github.com/redhat-cne/ptpgen/pkg/cluster"
+	"github.com/redhat-cne/ptpgen/pkg/config"
+	"github.com/redhat-cne/ptpgen/pkg/discovery"
+	"github.com/sirupsen/logrus"
+	"k8s.io/client-go/kubernetes"
+	sigsyaml "sigs.k8s.io/yaml"
+)
+
+func main() {
+	var (
+		mode             string
+		kubeconfig       string
+		externalGM       bool
+		fifo             bool
+		auth             bool
+		namespace        string
+		domain           int
+		wpcInterfaces    string
+		wpcDeviceID      string
+		useContainerCmds bool
+		verbose          bool
+		apply            bool
+		clean            bool
+	)
+
+	fs := flag.NewFlagSet("ptpgen", flag.ExitOnError)
+	fs.StringVar(&mode, "mode", "", "PTP mode: oc, bc, dualnicbc, dualnicbcha, tgm, dualfollower")
+	fs.StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig (default: $KUBECONFIG)")
+	fs.BoolVar(&externalGM, "external-gm", false, "Use external grandmaster")
+	fs.BoolVar(&fifo, "fifo", false, "Use SCHED_FIFO scheduling policy")
+	fs.BoolVar(&auth, "auth", false, "Enable PTP authentication")
+	fs.StringVar(&namespace, "namespace", "openshift-ptp", "PTP namespace")
+	fs.IntVar(&domain, "domain", 0, "PTP domain number (0 = use default 24)")
+	fs.StringVar(&wpcInterfaces, "wpc-interfaces", "", "Comma-separated WPC interface names (TGM mode)")
+	fs.StringVar(&wpcDeviceID, "wpc-device-id", "", "WPC GNSS device ID (TGM mode)")
+	fs.BoolVar(&useContainerCmds, "container-cmds", false, "Use container commands for L2 discovery")
+	fs.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
+	fs.BoolVar(&apply, "apply", false, "Apply configs to cluster (label nodes + create PtpConfigs)")
+	fs.BoolVar(&clean, "clean", false, "Clean existing test PtpConfigs and node labels before applying")
+
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "ptpgen - Generate PtpConfig resources based on cluster topology\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: ptpgen --mode <mode> [options]\n\n")
+		fmt.Fprintf(os.Stderr, "Modes:\n")
+		fmt.Fprintf(os.Stderr, "  oc            Ordinary Clock\n")
+		fmt.Fprintf(os.Stderr, "  bc            Boundary Clock\n")
+		fmt.Fprintf(os.Stderr, "  dualnicbc     Dual NIC Boundary Clock\n")
+		fmt.Fprintf(os.Stderr, "  dualnicbcha   Dual NIC Boundary Clock with HA\n")
+		fmt.Fprintf(os.Stderr, "  tgm           Telco Grandmaster (WPC)\n")
+		fmt.Fprintf(os.Stderr, "  dualfollower  Dual Follower\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		fs.PrintDefaults()
+	}
+
+	fs.Parse(os.Args[1:])
+
+	// Allow --clean without --mode to just clean up
+	if mode == "" && !clean {
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	if verbose {
+		logrus.SetLevel(logrus.DebugLevel)
+	} else {
+		logrus.SetLevel(logrus.InfoLevel)
+	}
+
+	// Build k8s client
+	cs, err := client.New(kubeconfig)
+	if err != nil {
+		logrus.Fatalf("Failed to create k8s client: %v", err)
+	}
+
+	// Clean existing configs if requested
+	if clean {
+		if err := cluster.Clean(cs.CoreV1Interface, cs.PtpV1Interface, namespace); err != nil {
+			logrus.Fatalf("Clean failed: %v", err)
+		}
+		if mode == "" {
+			// Clean-only mode, no generation needed
+			return
+		}
+	}
+
+	// Build a kubernetes.Interface from the rest config for l2discovery
+	k8sClient, err := kubernetes.NewForConfig(cs.Config)
+	if err != nil {
+		logrus.Fatalf("Failed to create kubernetes client: %v", err)
+	}
+
+	// Run L2 discovery and solver
+	logrus.Info("Running L2 discovery...")
+	result, err := discovery.Discover(k8sClient, cs.Config, useContainerCmds)
+	if err != nil {
+		logrus.Fatalf("Discovery failed: %v", err)
+	}
+
+	// Build options
+	opts := config.Options{
+		Mode:       config.Mode(strings.ToLower(mode)),
+		ExternalGM: externalGM,
+		FIFO:       fifo,
+		Auth:       auth,
+		Namespace:  namespace,
+		Domain:     domain,
+	}
+	if wpcInterfaces != "" {
+		opts.WPCIfList = strings.Split(wpcInterfaces, ",")
+	}
+	opts.WPCDeviceID = wpcDeviceID
+
+	// Generate configs
+	genResult, err := config.Generate(result, opts)
+	if err != nil {
+		logrus.Fatalf("Config generation failed: %v", err)
+	}
+
+	if apply {
+		// Label nodes
+		if err := cluster.LabelNodes(cs.CoreV1Interface, genResult.Configs, genResult.NodeLabels); err != nil {
+			logrus.Fatalf("Node labeling failed: %v", err)
+		}
+		// Create PtpConfigs
+		if err := cluster.Apply(cs.PtpV1Interface, namespace, genResult.Configs); err != nil {
+			logrus.Fatalf("Apply failed: %v", err)
+		}
+	} else {
+		// Output YAML to stdout
+		if err := printYAML(genResult.Configs); err != nil {
+			logrus.Fatalf("Failed to marshal YAML: %v", err)
+		}
+	}
+}
+
+func printYAML(configs []ptpv1.PtpConfig) error {
+	for i, cfg := range configs {
+		if i > 0 {
+			fmt.Println("---")
+		}
+		data, err := sigsyaml.Marshal(&cfg)
+		if err != nil {
+			return fmt.Errorf("failed to marshal config %s: %w", *cfg.Spec.Profile[0].Name, err)
+		}
+		fmt.Print(string(data))
+	}
+	return nil
+}
