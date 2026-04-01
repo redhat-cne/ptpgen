@@ -291,10 +291,17 @@ func initAndSolveProblems() {
 	(*clockRolesAlgoMapping[AlgoDualNicBCWithSlavesExtGM])[Slave1] = 4
 	(*clockRolesAlgoMapping[AlgoDualNicBCWithSlavesExtGM])[Slave2] = 5
 
-	// Solve all problems
+	// Solve all problems, recovering from panics for unsolvable topologies
 	for _, name := range enabledProblems {
 		solver.GlobalConfig.InitProblem(name, *problems[name], *clockRolesAlgoMapping[name])
-		solver.GlobalConfig.Run(name)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logrus.Debugf("Solver panic for %s (topology not supported): %v", name, r)
+				}
+			}()
+			solver.GlobalConfig.Run(name)
+		}()
 	}
 	solver.GlobalConfig.PrintFirstSolution()
 }

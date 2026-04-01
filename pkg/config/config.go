@@ -6,6 +6,7 @@ import (
 
 	ptpv1 "github.com/k8snetworkplumbingwg/ptp-operator/api/v1"
 	"github.com/redhat-cne/ptpgen/pkg/discovery"
+	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
@@ -120,20 +121,25 @@ type builder struct {
 
 func (b *builder) generateOC() ([]ptpv1.PtpConfig, error) {
 	var configs []ptpv1.PtpConfig
+	useExtGM := b.opts.ExternalGM
 
-	if b.opts.ExternalGM {
+	if !useExtGM {
+		if !b.result.HasSolution(discovery.AlgoOC) && b.result.HasSolution(discovery.AlgoOCExtGM) {
+			logrus.Info("No internal GM solution found, auto-detecting external GM")
+			useExtGM = true
+		}
+	}
+
+	if useExtGM {
 		algo := discovery.AlgoOCExtGM
 		if !b.result.HasSolution(algo) {
-			return nil, fmt.Errorf("no solution for OC with external GM")
+			return nil, fmt.Errorf("no solution for OC (tried both internal and external GM)")
 		}
 		slave1, _ := b.result.GetPort(algo, discovery.Slave1)
 		b.nodeLabels[slave1.NodeName] = PtpClockUnderTestNodeLabel
 		configs = append(configs, b.makeOC(PtpSlave1PolicyName, slave1, true, PtpClockUnderTestNodeLabel))
 	} else {
 		algo := discovery.AlgoOC
-		if !b.result.HasSolution(algo) {
-			return nil, fmt.Errorf("no solution for OC")
-		}
 		gm, _ := b.result.GetPort(algo, discovery.Grandmaster)
 		slave1, _ := b.result.GetPort(algo, discovery.Slave1)
 		b.nodeLabels[gm.NodeName] = PtpGrandmasterNodeLabel
@@ -146,8 +152,18 @@ func (b *builder) generateOC() ([]ptpv1.PtpConfig, error) {
 
 func (b *builder) generateBC() ([]ptpv1.PtpConfig, error) {
 	var configs []ptpv1.PtpConfig
+	useExtGM := b.opts.ExternalGM
 
-	if b.opts.ExternalGM {
+	if !useExtGM {
+		hasInternal := b.result.HasSolution(discovery.AlgoBC) || b.result.HasSolution(discovery.AlgoBCWithSlaves)
+		hasExternal := b.result.HasSolution(discovery.AlgoBCExtGM) || b.result.HasSolution(discovery.AlgoBCWithSlavesExtGM)
+		if !hasInternal && hasExternal {
+			logrus.Info("No internal GM solution found, auto-detecting external GM")
+			useExtGM = true
+		}
+	}
+
+	if useExtGM {
 		bestAlgo := ""
 		if b.result.HasSolution(discovery.AlgoBCExtGM) {
 			bestAlgo = discovery.AlgoBCExtGM
@@ -156,7 +172,7 @@ func (b *builder) generateBC() ([]ptpv1.PtpConfig, error) {
 			bestAlgo = discovery.AlgoBCWithSlavesExtGM
 		}
 		if bestAlgo == "" {
-			return nil, fmt.Errorf("no solution for BC with external GM")
+			return nil, fmt.Errorf("no solution for BC (tried both internal and external GM)")
 		}
 
 		bc1Master, _ := b.result.GetPort(bestAlgo, discovery.BC1Master)
@@ -200,9 +216,19 @@ func (b *builder) generateBC() ([]ptpv1.PtpConfig, error) {
 
 func (b *builder) generateDualNicBC(haEnabled bool) ([]ptpv1.PtpConfig, error) {
 	var configs []ptpv1.PtpConfig
+	useExtGM := b.opts.ExternalGM
+
+	if !useExtGM {
+		hasInternal := b.result.HasSolution(discovery.AlgoDualNicBC) || b.result.HasSolution(discovery.AlgoDualNicBCWithSlaves)
+		hasExternal := b.result.HasSolution(discovery.AlgoDualNicBCExtGM) || b.result.HasSolution(discovery.AlgoDualNicBCWithSlavesExtGM)
+		if !hasInternal && hasExternal {
+			logrus.Info("No internal GM solution found, auto-detecting external GM")
+			useExtGM = true
+		}
+	}
 
 	bestAlgo := ""
-	if b.opts.ExternalGM {
+	if useExtGM {
 		if b.result.HasSolution(discovery.AlgoDualNicBCExtGM) {
 			bestAlgo = discovery.AlgoDualNicBCExtGM
 		}
@@ -218,11 +244,11 @@ func (b *builder) generateDualNicBC(haEnabled bool) ([]ptpv1.PtpConfig, error) {
 		}
 	}
 	if bestAlgo == "" {
-		return nil, fmt.Errorf("no solution for DualNicBC (externalGM=%v)", b.opts.ExternalGM)
+		return nil, fmt.Errorf("no solution for DualNicBC (tried both internal and external GM)")
 	}
 
 	// GM (only for non-external)
-	if !b.opts.ExternalGM {
+	if !useExtGM {
 		switch bestAlgo {
 		case discovery.AlgoDualNicBC, discovery.AlgoDualNicBCWithSlaves:
 			gm, _ := b.result.GetPort(bestAlgo, discovery.Grandmaster)
@@ -282,11 +308,19 @@ func (b *builder) generateTGM() ([]ptpv1.PtpConfig, error) {
 
 func (b *builder) generateDualFollower() ([]ptpv1.PtpConfig, error) {
 	var configs []ptpv1.PtpConfig
+	useExtGM := b.opts.ExternalGM
 
-	if b.opts.ExternalGM {
+	if !useExtGM {
+		if !b.result.HasSolution(discovery.AlgoDualFollower) && b.result.HasSolution(discovery.AlgoDualFollowerExtGM) {
+			logrus.Info("No internal GM solution found, auto-detecting external GM")
+			useExtGM = true
+		}
+	}
+
+	if useExtGM {
 		algo := discovery.AlgoDualFollowerExtGM
 		if !b.result.HasSolution(algo) {
-			return nil, fmt.Errorf("no solution for DualFollower with external GM")
+			return nil, fmt.Errorf("no solution for DualFollower (tried both internal and external GM)")
 		}
 		slave1, _ := b.result.GetPort(algo, discovery.Slave1)
 		slave2, _ := b.result.GetPort(algo, discovery.Slave2)
@@ -294,9 +328,6 @@ func (b *builder) generateDualFollower() ([]ptpv1.PtpConfig, error) {
 		configs = append(configs, b.makeDualFollower(PtpSlave1PolicyName, slave1, slave2, true, PtpClockUnderTestNodeLabel))
 	} else {
 		algo := discovery.AlgoDualFollower
-		if !b.result.HasSolution(algo) {
-			return nil, fmt.Errorf("no solution for DualFollower")
-		}
 		gm, _ := b.result.GetPort(algo, discovery.Grandmaster)
 		slave1, _ := b.result.GetPort(algo, discovery.Slave1)
 		slave2, _ := b.result.GetPort(algo, discovery.Slave2)

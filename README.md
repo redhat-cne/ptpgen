@@ -16,7 +16,7 @@ A CLI tool that generates [PtpConfig](https://docs.openshift.com/container-platf
 
 - An OpenShift cluster with the [PTP Operator](https://docs.openshift.com/container-platform/latest/networking/ptp/about-ptp.html) installed
 - `KUBECONFIG` set or `--kubeconfig` pointing to your cluster
-- At least two nodes with PTP-capable NICs connected on the same L2 network
+- One or more nodes with PTP-capable NICs (single-node clusters with an external grandmaster are supported)
 
 ### 1. Preview the configs
 
@@ -140,7 +140,7 @@ ptpgen --clean
   -clean
         Clean existing test PtpConfigs and node labels (can be used alone or with -apply)
   -external-gm
-        Use external grandmaster (no GM config generated)
+        Force external grandmaster mode (auto-detected if no internal GM solution exists)
   -fifo
         Use SCHED_FIFO scheduling policy (default: SCHED_OTHER)
   -auth
@@ -178,7 +178,7 @@ Each PTP mode maps to a set of topology constraints. For example, a Boundary Clo
 - A slave port and master port on the **same NIC** (same PHC)
 - A grandmaster port on the **same LAN** as the BC's slave port
 
-The solver finds valid assignments of cluster interfaces to these roles.
+The solver finds valid assignments of cluster interfaces to these roles. If no internal grandmaster solution exists (e.g., single-node clusters) but external GM solutions are found, `ptpgen` automatically falls back to external GM mode.
 
 ### Config Generation
 
