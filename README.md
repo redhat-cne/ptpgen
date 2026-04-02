@@ -23,7 +23,7 @@ A CLI tool that generates [PtpConfig](https://docs.openshift.com/container-platf
 Generate YAML for a Boundary Clock setup and review it:
 
 ```bash
-ptpgen --mode bc
+go run main.go --mode bc
 ```
 
 This runs L2 discovery on your cluster, solves the topology, and prints PtpConfig YAML to stdout.
@@ -33,7 +33,7 @@ This runs L2 discovery on your cluster, solves the topology, and prints PtpConfi
 Once you're happy with the output, apply it directly:
 
 ```bash
-ptpgen --mode bc --clean --apply
+go run main.go --mode bc --clean --apply
 ```
 
 This will:
@@ -52,25 +52,25 @@ oc get nodes --show-labels | grep ptp/
 ### 4. Tear down
 
 ```bash
-ptpgen --clean
+go run main.go --clean
 ```
 
 ### Common workflows
 
 ```bash
 # Ordinary Clock with external grandmaster
-ptpgen --mode oc --external-gm --apply
+go run main.go --mode oc --external-gm --apply
 
 # Dual NIC Boundary Clock with HA and FIFO scheduling
-ptpgen --mode dualnicbcha --fifo --clean --apply
+go run main.go --mode dualnicbcha --fifo --clean --apply
 
 # Save configs to file, edit, then apply manually
-ptpgen --mode bc > ptpconfigs.yaml
+go run main.go --mode bc > ptpconfigs.yaml
 # ... edit ptpconfigs.yaml ...
 oc apply -f ptpconfigs.yaml
 
 # Telco Grandmaster with WPC NIC
-ptpgen --mode tgm --wpc-interfaces ens2f0,ens2f1 --wpc-device-id gnss0 --apply
+go run main.go --mode tgm --wpc-interfaces ens2f0,ens2f1 --wpc-device-id gnss0 --apply
 ```
 
 ## Supported PTP Modes
@@ -88,45 +88,55 @@ Each mode generates the full set of PtpConfig resources needed (e.g., BC mode ge
 
 ## Installation
 
-```bash
-go install github.com/redhat-cne/ptpgen@latest
-```
-
-Or build from source:
+Build from source (requires a local clone of [ptp-operator](https://github.com/k8snetworkplumbingwg/ptp-operator)):
 
 ```bash
 git clone https://github.com/redhat-cne/ptpgen.git
 cd ptpgen
+
+# Update go.mod replace directive to point to your local ptp-operator
+# (default: /Users/jacding/workspace/openshift/ptp-operator)
 go build -o ptpgen .
+
+# Optionally install to $GOPATH/bin
+cp ptpgen ~/go/bin/
+```
+
+Or run directly without building:
+
+```bash
+go run main.go --mode bc
 ```
 
 ## Usage
 
 ```bash
 # Generate Boundary Clock configs and print YAML to stdout
-ptpgen --mode bc --kubeconfig ~/.kube/config
+go run main.go --mode bc --kubeconfig ~/.kube/config
 
 # Generate OC configs with an external grandmaster
-ptpgen --mode oc --external-gm
+go run main.go --mode oc --external-gm
 
 # Generate Dual NIC BC with HA, FIFO scheduling, and PTP auth
-ptpgen --mode dualnicbcha --fifo --auth
+go run main.go --mode dualnicbcha --fifo --auth
 
 # Pipe directly into oc/kubectl to apply
-ptpgen --mode bc | oc apply -f -
+go run main.go --mode bc | oc apply -f -
 
 # Save to a file for review
-ptpgen --mode dualnicbc > ptpconfigs.yaml
+go run main.go --mode dualnicbc > ptpconfigs.yaml
 
 # Apply directly: discover topology, label nodes, create PtpConfigs
-ptpgen --mode bc --apply
+go run main.go --mode bc --apply
 
 # Clean existing test configs first, then apply new ones
-ptpgen --mode bc --clean --apply
+go run main.go --mode bc --clean --apply
 
 # Clean only (remove all test PtpConfigs and node labels)
-ptpgen --clean
+go run main.go --clean
 ```
+
+If you built the binary (`go build -o ptpgen .`), replace `go run main.go` with `./ptpgen` in the examples above.
 
 ## Options
 
@@ -250,7 +260,7 @@ This mirrors what the ptp-operator test suite does in `CreatePtpConfigurations()
 Use `--clean` alone to tear down a previous configuration:
 
 ```bash
-ptpgen --clean
+go run main.go --clean
 ```
 
 ## Project Structure
