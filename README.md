@@ -88,12 +88,37 @@ Each mode generates the full set of PtpConfig resources needed (e.g., BC mode ge
 
 ## Installation
 
-Build from source (requires a local clone of [ptp-operator](https://github.com/k8snetworkplumbingwg/ptp-operator)):
+### From release packages
+
+Download a pre-built binary from the [GitHub Releases](https://github.com/redhat-cne/ptpgen/releases) page:
+
+```bash
+# Linux (amd64)
+curl -LO https://github.com/redhat-cne/ptpgen/releases/latest/download/ptpgen_Linux_x86_64.tar.gz
+tar xzf ptpgen_Linux_x86_64.tar.gz ptpgen
+sudo mv ptpgen /usr/local/bin/
+
+# Linux (arm64)
+curl -LO https://github.com/redhat-cne/ptpgen/releases/latest/download/ptpgen_Linux_arm64.tar.gz
+tar xzf ptpgen_Linux_arm64.tar.gz ptpgen
+sudo mv ptpgen /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -LO https://github.com/redhat-cne/ptpgen/releases/latest/download/ptpgen_Darwin_arm64.tar.gz
+tar xzf ptpgen_Darwin_arm64.tar.gz ptpgen
+sudo mv ptpgen /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/redhat-cne/ptpgen/releases/latest/download/ptpgen_Darwin_x86_64.tar.gz
+tar xzf ptpgen_Darwin_x86_64.tar.gz ptpgen
+sudo mv ptpgen /usr/local/bin/
+```
+
+### From source
 
 ```bash
 git clone https://github.com/redhat-cne/ptpgen.git
 cd ptpgen
-
 go build -o ptpgen .
 
 # Optionally install to $GOPATH/bin
