@@ -3,7 +3,7 @@ module github.com/redhat-cne/ptpgen
 go 1.25.0
 
 require (
-	github.com/k8snetworkplumbingwg/ptp-operator v0.0.0
+	github.com/k8snetworkplumbingwg/ptp-operator v0.0.0-20260415183827-bd4f94cbea40
 	github.com/redhat-cne/l2discovery-lib v0.1.0
 	github.com/sirupsen/logrus v1.9.3
 	k8s.io/apimachinery v0.35.2
@@ -66,10 +66,4 @@ require (
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2-0.20260122202528-d9cc6641c482 // indirect
-)
-
-replace (
-	github.com/k8snetworkplumbingwg/ptp-operator => /Users/jacding/workspace/openshift/ptp-operator
-	github.com/openshift/api => github.com/openshift/api v0.0.0-20260318185450-1f2fa3f09f4e
-	github.com/openshift/client-go => github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13
 )

@@ -94,8 +94,6 @@ Build from source (requires a local clone of [ptp-operator](https://github.com/k
 git clone https://github.com/redhat-cne/ptpgen.git
 cd ptpgen
 
-# Update go.mod replace directive to point to your local ptp-operator
-# (default: /Users/jacding/workspace/openshift/ptp-operator)
 go build -o ptpgen .
 
 # Optionally install to $GOPATH/bin
