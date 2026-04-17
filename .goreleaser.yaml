@@ -4,7 +4,7 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - main: ./cmd/main.go
+  - main: ./main.go
     binary: ptpgen
     env:
       - CGO_ENABLED=0
